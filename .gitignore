@@ -1,0 +1,25 @@
+# python
+venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# data (too big for git)
+data/raw/*
+data/processed/*
+data/labeled/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+!data/labeled/.gitkeep
+
+# models
+models/*.pkl
+
+# env + secrets
+.env
+*.log
+kaggle.json
+
+# os
+.DS_Store
+Thumbs.db
