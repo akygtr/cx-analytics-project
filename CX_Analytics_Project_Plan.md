@@ -205,3 +205,99 @@ cx-analytics-project/
 - [ ] 3-minute Loom walkthrough video
 - [ ] LinkedIn post (optional but recommended)
 - [ ] Updated resume bullet points
+# Day 1 Summary — CX Analytics Project
+
+**Date:** May 19, 2026
+**Status:** Complete
+
+## What Got Done
+
+### Environment
+- Project folder: `C:\Users\akskumari\Desktop\cx-analytics-project`
+- Python virtual environment created (`venv`)
+- All requirements installed from `requirements.txt`: pandas, numpy, scikit-learn, spaCy (with `en_core_web_sm` 3.7.1), Hugging Face Transformers, torch, BERTopic, XGBoost, Streamlit, NLTK, plus supporting libraries
+- Label Studio intentionally excluded from main env due to dependency conflict with NLTK. Will install in separate venv on Day 5.
+- `pip-system-certs` installed to resolve a Python SSL cert issue that was blocking Kaggle API access
+
+### Repo
+- GitHub repo live at: https://github.com/akygtr/cx-analytics-project (public)
+- Initial commit + Day 1 commit both pushed
+- `.gitignore` excludes venv, raw data, models, kaggle.json, and similar
+
+### Folder Structure
+
+cx-analytics-project/
+├── dashboard/
+├── data/
+│   ├── raw/          (datasets downloaded here)
+│   ├── processed/
+│   └── labeled/
+├── models/
+├── notebooks/
+│   └── 01_data_exploration.ipynb  (DONE)
+├── reports/
+│   └── project_narrative.md       (DONE)
+├── src/
+│   └── download_data.py           (reusable Kaggle download script)
+├── .gitignore
+├── CX_Analytics_Project_Plan.md
+├── README.md
+└── requirements.txt
+
+### Data Downloaded
+All three datasets are in `data/raw/` (not committed to git, too large):
+
+1. **Olist Brazilian E-commerce** (~45MB)
+   - `data/raw/olist/` with 9 CSVs
+   - 99,441 orders, 99,224 reviews, 99,441 customers, 112,650 order items, 32,951 products, 103,886 payments
+   - 41% of reviews have written text (40,977 with comments)
+   - Avg review score 4.09, bimodal: 57k 5-stars vs 11k 1-stars
+   - Most review text is in Portuguese, will need filtering or translation on Day 2
+
+2. **Women's Clothing E-commerce Reviews** (~8MB)
+   - `data/raw/womens_clothing/Womens Clothing E-Commerce Reviews.csv`
+   - 23,486 reviews, English
+   - 845 null review texts
+   - Mean review length 309 chars
+   - Rating distribution skewed positive (13k of 5-stars, 842 of 1-stars)
+   - Top departments: Tops (10,468), Dresses (6,319), Bottoms (3,799), Intimate (1,735), Jackets (1,032)
+
+3. **Customer Support on Twitter** (~169MB)
+   - `data/raw/twitter_support/` (only peeked at first 10k rows so far)
+
+### Notebook Work
+`notebooks/01_data_exploration.ipynb` has 8 cells:
+- Imports + folder check
+- Load all 6 Olist tables
+- Preview orders and reviews
+- Review score distribution analysis
+- Load Women's Clothing CSV
+- Profile Women's reviews (nulls, length, rating dist, departments)
+- Peek at Twitter support data (first 10k rows)
+
+## Project Context (for picking up later)
+
+**Brand:** Atlas and Vine, fictional mid-sized DTC fashion retailer, ~$40M revenue
+**Business problem:** Returns up 22%→31%, repeat purchase down 38%→27%, support tickets up 45% QoQ
+**Goal:** Identify drop-off points, root-cause customer frustration, recommend interventions
+**Deliverables:** Streamlit dashboard, business report, case study, Loom walkthrough, LinkedIn post
+
+## Tech Decisions Made
+- Using browser-based GitHub auth (Git Credential Manager) instead of personal access tokens
+- Kaggle CLI 1.6.14 (legacy API key required, not the newer token format)
+- SSL fix via `pip-system-certs` (uses Windows cert store)
+- spaCy model: `en_core_web_sm` 3.7.1 (installed via direct wheel URL, not `spacy download`)
+
+## What's Next: Day 2 (May 20)
+
+Deep cleaning + preparation:
+- Join Olist tables (orders + reviews + customers + payments + items) into one master dataframe
+- Standardize dates, handle missing values, compute derived columns (delivery time, days late)
+- Clean Women's Clothing text: strip HTML/URLs/emojis, lowercase, tokenize, lemmatize
+- Language detection on Olist reviews (langdetect)
+- Filter or translate Portuguese reviews
+- Remove spam and very short reviews
+- Save clean master datasets as parquet files in `data/processed/`
+- Document every cleaning decision with before/after samples
+
+Reference: `CX_Analytics_Project_Plan.md` Day 3–4 section (project plan dates are slightly behind actual progress, ahead of schedule by one day)
