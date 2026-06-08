@@ -301,3 +301,278 @@ Deep cleaning + preparation:
 - Document every cleaning decision with before/after samples
 
 Reference: `CX_Analytics_Project_Plan.md` Day 3–4 section (project plan dates are slightly behind actual progress, ahead of schedule by one day)
+
+# Day 2 Summary — CX Analytics Project
+
+**Date:** May 20, 2026
+**Status:** Complete
+
+## What Got Done
+
+### Transactional Cleaning (Olist)
+- Loaded 6 Olist tables: orders (99,441), order_items (112,650), reviews (99,224), customers (99,441), payments (103,886), products (32,951)
+- Standardized all date columns to datetime
+- Built derived delivery features on orders:
+  - `delivery_time_days` (purchase to customer delivery)
+  - `days_vs_estimate` (negative = early, positive = late)
+  - `is_late` (boolean flag)
+- Key delivery findings: avg delivery 12.1 days, 6.8% late rate, when late they're 10.6 days late on average
+- Aggregated payments per order (multi-row → single row): payment_count, total_payment, payment_types, main_payment_type
+- Aggregated order items per order: item_count, total_price, total_freight, distinct_products
+- Caught and fixed a duplicate-review bug: 243 orders had multiple review rows, inflating master from 99,441 to 99,684. Deduped by keeping most recent review per order_id.
+- Final master shape: 99,441 rows × 31 columns. One-to-one with orders confirmed.
+
+### Text Cleaning (Women's Clothing)
+- Loaded 23,486 reviews, 22,641 after dropping nulls
+- Did pattern-based noise analysis instead of generic cleaning. Key findings:
+  - Dataset is pre-cleaned: zero HTML, URLs, emojis, all-caps
+  - 38.8% have numbers (sizes, heights, weights — KEPT as signal)
+  - 33.7% have special chars (apostrophes, quotes — KEPT)
+  - 11.6% have repeated chars (mostly ellipses and !!! emphasis — KEPT)
+  - 0.6% have doubled apostrophes (inch notation: 5'2'' — normalized to 5'2')
+  - 0.1% have non-ASCII (mangled accents — normalized via unicodedata)
+  - Reviews capped at 500 chars by publisher
+  - Only 34 reviews under 5 words — flagged as `is_short` not dropped
+- Built two cleaning functions:
+  - `clean_text` (light): for DistilBERT, BERTopic, dashboard display
+  - `preprocess_text` (aggressive): lowercase, no punct/numbers, stopwords removed, lemmatized — for TF-IDF and topic modeling
+- Applied both to all 22,641 reviews
+- Average tokens after aggressive preprocessing: 27.8 (down from ~60 raw words)
+
+### Language Detection (Olist)
+- Ran `langdetect` (with deterministic seed) on 40,577 Olist reviews with text
+- Distribution: 84% Portuguese, 8% unknown (too-short), 159 English, rest misdetected short Portuguese
+- **Strategic decision:** Only 159 English Olist reviews — not enough for NLP. All sentiment/theme/topic work goes on Women's Clothing. Olist used for transactional analysis only.
+
+### Files Saved
+In `data/processed/`:
+- `olist_master.parquet` (20.7 MB) — joined Olist master with delivery/payment features
+- `womens_clean.parquet` (10.5 MB) — Women's Clothing reviews with both cleaning columns
+- `olist_reviews_with_lang.parquet` (4.8 MB) — language-tagged Olist reviews
+
+## Tech Decisions Made
+- Two-track cleaning strategy: preserve text for transformer models, aggressively clean for bag-of-words
+- Kept numbers and punctuation in light cleaning (sizes are signal for fashion reviews)
+- Deduped reviews on `order_id` by keeping most recent
+- Skipped translation of Portuguese reviews (159 English is too few; pivot to Women's Clothing for all NLP)
+- Used parquet over CSV for fast loading and preserved dtypes
+
+## What's Next: Day 3 (May 21)
+
+Manual labeling setup + start labeling:
+- Install Doccano in separate venv (avoid Label Studio dep conflicts)
+- Set up labeling project with three schemas:
+  - Sentiment: positive / negative / neutral
+  - Theme: sizing / delivery / quality / service / price / returns
+  - Journey stage: pre-purchase / purchase / delivery / post-purchase
+- Sample 500 reviews from Women's Clothing for labeling
+- Begin labeling (target: 200 done by end of Day 3, 500 by end of Day 4)
+
+Reference: `CX_Analytics_Project_Plan.md` Day 5–6 section
+
+# Day 3 Summary — CX Analytics Project
+
+**Date:** May 21, 2026
+**Status:** Complete
+
+## What Got Done
+
+### Strategic Pivot (context for the record)
+- Evaluated adding Women's Clothing (Kaggle) as NLP layer alongside Olist transactions
+- Identified the core problem: two unrelated datasets with no shared keys. Olist (Brazil, Portuguese) and Women's Clothing (US, English) had zero customer overlap — every cross-analysis would have been fiction
+- Decision: drop Women's Clothing from the active pipeline. Olist becomes the single spine for both transactions and text. `womens_clean.parquet` retained on disk but not used going forward
+- This means every finding in the project — sentiment, themes, churn, segments — refers to the same real customer population. The "11,997 / 11,997" join count at the end of today confirmed that
+
+### Translation (PT → EN)
+- Loaded `olist_reviews_with_lang.parquet` (40,577 reviews, 84% Portuguese)
+- Built stratified sample of 12,000: took ALL 1–2 star reviews first (negative signal), filled rest from 3–5 star
+- Translated using `deep-translator` (GoogleTranslator backend), batched at 0.4s sleep per call
+- Checkpointed every 200 rows to `olist_translation_checkpoint.parquet` — survived any crash/disconnect without losing progress
+- Total fails: ~15 out of 12,000 (0.12%) — two types:
+  - SSL/connection drops: random network noise, retried once, moved on
+  - "No translation found": short/fragmented reviews (`"Encomenda errada"`) or ones with heavy typos. These are the weakest signal reviews anyway
+- Translation quality spot-checked on 5 samples: meaning and sentiment preserved accurately across all five. Machine translation occasionally stiff but classifier-ready
+
+### Text Cleaning
+- Relocated both cleaning functions from `02_data_cleaning.ipynb` into `src/text_preprocessing.py` as importable module
+- Fixed a scoping bug: `stop_words` and `lemmatizer` were notebook-level variables in Day 2, not inside the function. Moved to module level in the `.py` file so they initialize once on import
+- Applied both functions to all translated reviews:
+  - `clean_text` (light): unicode normalization, apostrophe fix, whitespace collapse — for DistilBERT, BERTopic, dashboard display
+  - `preprocess_text` (aggressive): lowercase, strip punct/numbers, remove stopwords, lemmatize — for TF-IDF and topic modeling
+
+### Linkage Verification
+- Saved `olist_reviews_translated.parquet` keyed on `order_id`
+- Inner join to `olist_master.parquet`: **11,997 / 11,997** — every translated review joins to a real order, customer, payment, and delivery record
+- This is the fix that makes the project coherent: the same 11,997 customers power both the text analysis and the transactional modeling
+
+### Files Saved
+In `data/processed/`:
+- `olist_reviews_translated.parquet` (2.8 MB) — 11,997 translated + cleaned reviews, keyed on `order_id`
+- `olist_translation_checkpoint.parquet` — deleted after promoting to final (served its purpose)
+
+In `src/`:
+- `text_preprocessing.py` — `clean_text` and `preprocess_text` as importable functions, used by notebook 03 and all subsequent notebooks
+
+## Tech Decisions Made
+- Stratified sampling: oversample negatives (1–2 star) not random sample — complaint signal is what the project is built on
+- Checkpoint every 200 rows not at the end — makes a 2-hour translation run resumable after any failure
+- `BATCH_SLEEP = 0.4s` — enough to avoid rate-limiting without making the run painfully slow
+- Translate 12K not all 40K — free API rate-limits; 12K is more than enough for classifier training + topic modeling
+- Module-level `stop_words` / `lemmatizer` in `text_preprocessing.py` — initialize once, not on every function call
+
+## Notebook
+`notebooks/03_translation_and_cleaning.ipynb` — 20 cells covering path setup, column verification, stratified sampling, translation loop, spot-check, cleaning, before/after samples, save + join verification
+
+## What's Next: Day 4 (May 22)
+
+Manual labeling setup + annotation:
+- Sample 500 reviews from `olist_reviews_translated.parquet` for labeling, stratified by score
+- Set up Doccano in a separate venv (avoid dep conflicts with main env)
+- Define three label schemas:
+  - Sentiment: positive / negative / neutral
+  - Theme: delivery / quality / service / price / returns / other
+  - Journey stage: pre-purchase / purchase / delivery / post-purchase
+- Export sample to JSONL, import into Doccano
+- Target: 250 labeled by end of Day 4, 500 by end of Day 5
+- Note: theme labels will skew delivery/logistics-heavy given the Olist review content — that's real signal, don't force balance
+
+Reference: `CX_Analytics_Project_Plan.md` Day 5–6 section (project is running one day ahead of original plan)
+
+---
+
+# Day 4 Plan — CX Analytics Project
+
+**Date:** May 22, 2026
+**Phase:** Manual Labeling Setup + Annotation
+
+---
+
+## Goal for the Day
+
+Get 250–500 reviews labeled across three schemas (sentiment, theme, journey stage) so Day 5 has training data to build classifiers on. Quality of labels determines classifier quality — this is not the day to rush.
+
+---
+
+## Task List
+
+### Setup (do this first, before labeling anything)
+
+- [ ] Create a separate venv for Doccano to avoid dep conflicts with main env:
+  ```
+  python -m venv venv-doccano
+  venv-doccano\Scripts\activate
+  pip install doccano
+  ```
+- [ ] Launch Doccano and create admin account:
+  ```
+  doccano init
+  doccano createuser --username admin --password admin
+  doccano webserver --port 8000
+  ```
+- [ ] Open `http://localhost:8000` in browser
+
+### Sample 500 reviews for labeling
+
+- [ ] Load `olist_reviews_translated.parquet`
+- [ ] Stratified sample: take proportionally from each star rating so all sentiment classes are represented
+- [ ] Export to JSONL (Doccano's import format):
+  ```python
+  import pandas as pd, json
+  df = pd.read_parquet("data/processed/olist_reviews_translated.parquet")
+  sample = df.groupby("review_score", group_keys=False).apply(
+      lambda x: x.sample(min(len(x), 100), random_state=42)
+  ).head(500)
+  with open("data/labeled/labeling_sample.jsonl", "w") as f:
+      for _, r in sample.iterrows():
+          f.write(json.dumps({
+              "text": r["review_clean"],
+              "meta": {"order_id": r["order_id"], "score": int(r["review_score"])}
+          }) + "\n")
+  ```
+- [ ] Import JSONL into Doccano project
+
+### Define label schemas in Doccano
+
+Three separate label sets (create one Doccano project per schema, or use a single project with prefixed labels):
+
+**Sentiment**
+- `positive`
+- `negative`
+- `neutral`
+
+**Theme** (pick the single most dominant theme per review)
+- `delivery` — late, missing, wrong item shipped
+- `quality` — product condition, material, durability
+- `service` — support responsiveness, communication, resolution
+- `price` — value for money, overpriced, discounts
+- `returns` — refund difficulty, return policy, exchange
+- `other` — doesn't fit above cleanly
+
+**Journey Stage** (where is the customer in their experience?)
+- `pre-purchase` — browsing, search, product info
+- `purchase` — checkout, payment, order confirmation
+- `delivery` — shipping, tracking, arrival
+- `post-purchase` — after receipt, satisfaction, re-order intent
+
+### Labeling
+
+- [ ] Label 500 reviews across all three schemas
+- [ ] Hard rule: if a review genuinely fits two themes, pick the one the customer is most frustrated about
+- [ ] Hard rule: neutral sentiment = factual, no clear positive or negative emotion (rare in Olist)
+- [ ] Hard rule: be consistent. If "produto atrasou" (product was late) = delivery + negative in review 1, it must be the same in review 100
+- [ ] Spot-check your own labels every 50 reviews — label drift is real and kills classifier quality
+- [ ] Target: 250 minimum today, 500 by end of Day 5
+
+### Export labeled data
+
+- [ ] Export from Doccano as JSONL
+- [ ] Save to `data/labeled/labeled_500.jsonl`
+- [ ] Parse into a DataFrame, verify label distribution (no class should be under 30 samples)
+
+---
+
+## Label Distribution Target (rough guide)
+
+| Sentiment | Target count |
+|-----------|-------------|
+| negative  | ~250        |
+| positive  | ~175        |
+| neutral   | ~75         |
+
+| Theme    | Target count |
+|----------|-------------|
+| delivery | ~180        |
+| quality  | ~100        |
+| service  | ~80         |
+| returns  | ~60         |
+| price    | ~50         |
+| other    | ~30         |
+
+These are guides not hard targets. If your actual data skews different, that's fine — it's real signal. Don't manufacture balance by mislabeling.
+
+---
+
+## Honest Time Estimate
+
+- Setup (venv + Doccano + sample export): 45–60 min
+- 500 labels × 3 schemas: 3–4 hours minimum at a sustainable pace (~2 min per review for all three labels)
+- If you hit 250 today and finish the rest on Day 5 morning, that is fine — classifier training can start on the afternoon of Day 5
+
+---
+
+## Files Expected at End of Day 4
+
+- `data/labeled/labeling_sample.jsonl` — 500 raw reviews exported for labeling
+- `data/labeled/labeled_500.jsonl` — same 500 with labels attached (from Doccano export)
+- `notebooks/04_labeling_prep.ipynb` — sampling + export + label distribution check
+
+---
+
+## Watch Out For
+
+- **Label drift:** your definition of "neutral" at review 10 vs review 400 will drift if you don't check. Every 50 reviews, re-read your first 10 labels and recalibrate.
+- **Theme skew:** Olist reviews are delivery-heavy. "Delivery" will dominate your theme distribution. That's real, don't fight it by forcing other themes onto reviews that are clearly delivery complaints.
+- **Short reviews are hard to label:** `"Ótimo"` translated to `"Great"` — that's positive, probably post-purchase, theme is other. Don't overthink one-word reviews; label them quickly and move on.
+- **Doccano vs main env:** always activate `venv-doccano` before running `doccano webserver`. Never install doccano into your main venv.
+
+Reference: `CX_Analytics_Project_Plan.md` Day 5–6 section

@@ -1,18 +1,18 @@
 # python
 venv/
+venv-doccano/
 __pycache__/
 *.pyc
 .ipynb_checkpoints/
 
-# data (too big for git)
+# raw data (huge, regeneratable from Kaggle)
 data/raw/*
-data/processed/*
-data/labeled/*
 !data/raw/.gitkeep
-!data/processed/.gitkeep
-!data/labeled/.gitkeep
 
-# models
+# processed + labeled data: KEEP TRACKED (dashboard needs them on Streamlit Cloud)
+# do not ignore data/processed or data/labeled
+
+# model binaries (regeneratable, optional)
 models/*.pkl
 
 # env + secrets
