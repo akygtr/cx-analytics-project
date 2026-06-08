@@ -1,0 +1,5 @@
+segment,customers,avg_observed_value,total_observed_value,avg_orders,repeat_rate_pct,avg_review,late_rate
+"Low-value, on-time",27065,335.15,9070919.69,1.08,6.98,4.12,0.0
+Older / dormant,28097,117.22,3293403.46,1.02,2.11,4.19,0.0
+"High-value, satisfied",34611,72.56,2511204.2,1.01,1.1,4.3,0.0
+"Late delivery, unhappy",6323,179.24,1133344.77,1.02,2.12,2.27,0.99
