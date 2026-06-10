@@ -2,7 +2,7 @@
 
 **What makes a customer never come back?** An end-to-end CX analysis of 99,441 orders that figures out which problems are worth fixing and which ones no model can fix.
 
-**[▶ Live dashboard](https://ecommerce-voc-insights.streamlit.app)**  ·  [📄 Business report (PDF)](reports/business_report.pdf)  ·  🎥 Walkthrough video *(coming soon)*
+**[▶ Live dashboard](https://ecommerce-voc-insights.streamlit.app)**  ·  [📄 Business report (PDF)](reports/business_report.pdf)  ·  [📄 Case study (PDF)](reports/case_study.pdf)  ·  🎥 Walkthrough video *(coming soon)*
 
 > Built on the [Olist Brazilian e-commerce dataset](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce). "Atlas & Vine" is a fictional fashion retailer used to frame the analysis. All monetary figures are in Brazilian reais (R$).
 
